@@ -149,7 +149,6 @@ def register_noon_weekday_class(
         )
 
         return
-    # TODO: Check this works for putting on waiting list!
 
     # Click on the class confirm button
     confirm_button = wait.until(
