@@ -1,16 +1,19 @@
-# Register the user with login infos from "fliip_login.txt" to all the noon class of fliip_gym_name for days set true of noon_classes_to_register
+# %% Imports
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.webdriver import WebDriver  # For typing
+from selenium.webdriver.chrome.webdriver import (
+    WebDriver,
+)  # For typing of function attributes
 
 import dateutil.parser as parser
 from datetime import datetime, timedelta
 import time
 import os
 
+# TODO: Move these variables to parse arg with main
 fliip_gym_name = "crossfitahuntsic"
 
 noon_classes_to_register = {
@@ -22,6 +25,8 @@ noon_classes_to_register = {
     "Saturday": False,
     "Sunday": False,
 }
+headless = True  # Set to false if need to see the chrome driver window - for debugging
+
 
 # %% Get Login Infos
 fliip_username = os.getenv("FLIIP_USERNAME")
@@ -35,7 +40,11 @@ if fliip_password is None or fliip_password == "":
 print(f"Connecting to {fliip_gym_name} Fliip page to log {fliip_username}...")
 
 # Set up the Chrome WebDriver (Make sure you have downloaded chromedriver)
-driver = webdriver.Chrome()
+options = webdriver.ChromeOptions()
+if headless:
+    options.add_argument("headless")
+    # options.add_argument("disable-gpu")
+driver = webdriver.Chrome(options=options)
 
 # Define the WebDriverWait for waiting for elements
 wait = WebDriverWait(driver, timeout=5)  # seconds
@@ -73,9 +82,12 @@ en_language_button.click()
 
 # Register to noon class function
 # Monday is weekday==0.
+# Return a tuple:
+# First field is a None if not registered, a datetime if registered.
+# Second field is True if just registered, false if already registered. Ignore if first field is none.
 def register_noon_weekday_class(
     driver: WebDriver, weekday_to_register: int, current_calendar_page_date: datetime
-) -> None | datetime:
+) -> tuple[None | datetime, bool]:
     max_hours_in_future_to_register = 336
     # Noon class id from the "class-block-action-icon subscribe-class-icon  class-action-top-lg" on-click register parameters
     noon_class_id = {
@@ -98,12 +110,12 @@ def register_noon_weekday_class(
     calendar_page_weekday = calendar_page_weekday.replace(hour=12)  # Noon class
     if calendar_page_weekday < datetime.now():
         # Class in the past, return and skip
-        return None
+        return None, False
     if (
         calendar_page_weekday - datetime.now()
     ).total_seconds() >= max_hours_in_future_to_register * 3600:
         # Too far in future to register yet, return and skip
-        return None
+        return None, False
     calendar_page_weekday_str = calendar_page_weekday.strftime(f"%Y-%m-%d")
     register_button = driver.find_element(
         By.XPATH,
@@ -152,7 +164,7 @@ def register_noon_weekday_class(
             EC.invisibility_of_element_located((By.ID, popup_window_id))
         )
 
-        return calendar_page_weekday
+        return calendar_page_weekday, False
 
     # Click on the class confirm button
     confirm_button = wait.until(
@@ -173,13 +185,14 @@ def register_noon_weekday_class(
         )
     )
     exit_button.click()
-    return calendar_page_weekday
+    return calendar_page_weekday, True
 
 
+print("\nRegistering", end="", flush=True)
 # Date in week scrolling header should be today at calendar page first loading
 expected_date = datetime.now().date()
 
-registered_datetime_list: list[datetime] = []
+registered_return_list: list[tuple[datetime | None, bool]] = []
 # Change the calendar to two weeks later from now
 for x in range(0, 3):
     # Check current calendar week page date against expected date
@@ -201,12 +214,13 @@ for x in range(0, 3):
     for day in noon_classes_to_register:
         if noon_classes_to_register[day]:
             weekday_number = time.strptime(day, "%A").tm_wday
-            registered_date = register_noon_weekday_class(
+            registered_return = register_noon_weekday_class(
                 driver=driver,
                 current_calendar_page_date=current_calendar_page_date,
                 weekday_to_register=weekday_number,
             )
-            registered_datetime_list.append(registered_date)
+            registered_return_list.append(registered_return)
+            print(".", end="", flush=True)
 
     # Change the calendar week page to next week
     # Find and click the next week button
@@ -224,8 +238,10 @@ for x in range(0, 3):
 driver.quit()
 
 print(
-    f"\nRegistration done for user {fliip_username} at gym {fliip_gym_name} for noon classes:"
+    f"\nRegistration done for user {fliip_username} at gym {fliip_gym_name} for noon classes of dates:"
 )
-for reg_datetime in registered_datetime_list:
+for reg_datetime, just_registered in registered_return_list:
     if reg_datetime is not None:
-        print(f"\t{reg_datetime.day}")
+        print(
+            f"\t{reg_datetime.strftime(f"%Y-%m-%d")} - {"New Registration" if just_registered else "Already Registered"}"
+        )
