@@ -9,6 +9,7 @@ from selenium.webdriver.chrome.webdriver import WebDriver  # For typing
 import dateutil.parser as parser
 from datetime import datetime, timedelta
 import time
+import os
 
 fliip_gym_name = "crossfitahuntsic"
 
@@ -23,12 +24,12 @@ noon_classes_to_register = {
 }
 
 # %% Get Login Infos
-# TODO: Replace this with env variables
-print("Opening fliip_login.txt to get logins...")
-with open("fliip_login.txt", "r") as file:
-    lines = file.readlines()
-    fliip_username = lines[0].replace("\n", "")
-    fliip_password = lines[1].replace("\n", "")
+fliip_username = os.getenv("FLIIP_USERNAME")
+fliip_password = os.getenv("FLIIP_PASSWORD")
+if fliip_username is None or fliip_username == "":
+    raise ConnectionAbortedError("FLIIP_USERNAME Environnement Variable Missing!")
+if fliip_password is None or fliip_password == "":
+    raise ConnectionAbortedError("FLIIP_PASSWORD Environnement Variable Missing!")
 
 # %% Open Page
 print(f"Connecting to {fliip_gym_name} Fliip page to log {fliip_username}...")

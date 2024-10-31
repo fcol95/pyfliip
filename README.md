@@ -1,5 +1,13 @@
 # PyFliip
+Python scripts to automatically manages Fliip Gym Class Inscriptions Based on Selenium.
+
 ## Installation
-1. Install google chrome.
-2. pip install selenium
-3. Create a "fliip_login.txt" file in this repo top level folder locally with the first line being your username and the second your password.
+1. Install Google Chrome: https://www.google.com/intl/fr/chrome/.
+2. Install Python 3: https://www.python.org/downloads/.
+3. Install Selenium Python Package: pip install selenium
+4. Create environment variables for Fliip Login Info:
+    a. FLIIP_USERNAME
+    b. FLIIP_PASSWORD
+
+## Buy me a coffee (or a beer)
+https://buymeacoffee.com/fcol95
