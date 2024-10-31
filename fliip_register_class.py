@@ -74,7 +74,7 @@ en_language_button.click()
 # Monday is weekday==0.
 def register_noon_weekday_class(
     driver: WebDriver, weekday_to_register: int, current_calendar_page_date: datetime
-):
+) -> None | datetime:
     max_hours_in_future_to_register = 336
     # Noon class id from the "class-block-action-icon subscribe-class-icon  class-action-top-lg" on-click register parameters
     noon_class_id = {
@@ -97,12 +97,12 @@ def register_noon_weekday_class(
     calendar_page_weekday = calendar_page_weekday.replace(hour=12)  # Noon class
     if calendar_page_weekday < datetime.now():
         # Class in the past, return and skip
-        return
+        return None
     if (
         calendar_page_weekday - datetime.now()
     ).total_seconds() >= max_hours_in_future_to_register * 3600:
         # Too far in future to register yet, return and skip
-        return
+        return None
     calendar_page_weekday_str = calendar_page_weekday.strftime(f"%Y-%m-%d")
     register_button = driver.find_element(
         By.XPATH,
@@ -151,7 +151,7 @@ def register_noon_weekday_class(
             EC.invisibility_of_element_located((By.ID, popup_window_id))
         )
 
-        return
+        return calendar_page_weekday
 
     # Click on the class confirm button
     confirm_button = wait.until(
@@ -172,12 +172,13 @@ def register_noon_weekday_class(
         )
     )
     exit_button.click()
-    return
+    return calendar_page_weekday
 
 
 # Date in week scrolling header should be today at calendar page first loading
 expected_date = datetime.now().date()
 
+registered_datetime_list: list[datetime] = []
 # Change the calendar to two weeks later from now
 for x in range(0, 3):
     # Check current calendar week page date against expected date
@@ -199,11 +200,12 @@ for x in range(0, 3):
     for day in noon_classes_to_register:
         if noon_classes_to_register[day]:
             weekday_number = time.strptime(day, "%A").tm_wday
-            register_noon_weekday_class(
+            registered_date = register_noon_weekday_class(
                 driver=driver,
                 current_calendar_page_date=current_calendar_page_date,
                 weekday_to_register=weekday_number,
             )
+            registered_datetime_list.append(registered_date)
 
     # Change the calendar week page to next week
     # Find and click the next week button
@@ -220,4 +222,9 @@ for x in range(0, 3):
 
 driver.quit()
 
-print(f"Registration done for the user at noon!")
+print(
+    f"\nRegistration done for user {fliip_username} at gym {fliip_gym_name} for noon classes:"
+)
+for reg_datetime in registered_datetime_list:
+    if reg_datetime is not None:
+        print(f"\t{reg_datetime.day}")
