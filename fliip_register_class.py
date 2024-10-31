@@ -44,7 +44,7 @@ driver.get(f"https://{fliip_gym_name}.fliipapp.com/home/login")
 
 # Wait for the page to load and click refuse all privacy button
 reject_button = wait.until(
-    EC.presence_of_element_located(
+    EC.element_to_be_clickable(
         (By.XPATH, "/html/body/div[2]/div/div/div/div[2]/button[2]")
     )
 )
@@ -63,7 +63,7 @@ password_input.send_keys(Keys.RETURN)
 
 # Wait to the login to occur and change to English to properly parse date strings
 en_language_button = wait.until(
-    EC.presence_of_element_located((By.XPATH, '//*[@id="change_language"]/div/button'))
+    EC.element_to_be_clickable((By.XPATH, '//*[@id="change_language"]/div/button'))
 )
 en_language_button.click()
 
@@ -135,12 +135,15 @@ def register_noon_weekday_class(
     if "cancel" in title.text.lower():
         # Already registered, close window and return
         try:
-            close_button = driver.find_element(
-                By.XPATH, f'//*[@id="{popup_window_id}"]/div/div/div[1]/button'
+            close_button = wait.until(
+                EC.element_to_be_clickable(
+                    (By.XPATH, f'//*[@id="{popup_window_id}"]/div/div/div[1]/button')
+                )
             )
+
         except:
             close_button = wait.until(
-                EC.presence_of_element_located((By.CLASS_NAME, "close"))
+                EC.element_to_be_clickable((By.CLASS_NAME, "close"))
             )
         close_button.click()
 
@@ -206,8 +209,11 @@ for x in range(0, 3):
     # Find and click the next week button
     next_week_button = wait.until(EC.element_to_be_clickable((By.ID, "next_week")))
     next_week_button.click()
-    # Wait for button staleness (page refresh)
-    wait.until(EC.staleness_of(next_week_button))
+    try:
+        # Wait for button staleness (page refresh)
+        wait.until(EC.staleness_of(next_week_button))
+    except:
+        pass
     # Add a week for the next expected date
     expected_date = expected_date + timedelta(days=7)
 
