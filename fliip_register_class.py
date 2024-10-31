@@ -41,6 +41,14 @@ print(f"Connecting to {fliip_gym_name} Fliip page to log {fliip_username}...")
 
 # Set up the Chrome WebDriver (Make sure you have downloaded chromedriver)
 options = webdriver.ChromeOptions()
+"""
+log-level: 
+    INFO = 0, (default)
+    WARNING = 1, 
+    LOG_ERROR = 2, 
+    LOG_FATAL = 3.
+"""
+options.add_argument("log-level=2")
 if headless:
     options.add_argument("headless")
     options.add_argument("disable-gpu")
