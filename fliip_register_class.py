@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import time
 
 fliip_gym_name = "crossfitahuntsic"
-
+# TODO Night Class
 noon_classes_to_register = {
     "Monday": False,
     "Tuesday": True,
