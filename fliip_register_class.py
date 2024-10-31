@@ -43,7 +43,7 @@ print(f"Connecting to {fliip_gym_name} Fliip page to log {fliip_username}...")
 options = webdriver.ChromeOptions()
 if headless:
     options.add_argument("headless")
-    # options.add_argument("disable-gpu")
+    options.add_argument("disable-gpu")
 driver = webdriver.Chrome(options=options)
 
 # Define the WebDriverWait for waiting for elements
