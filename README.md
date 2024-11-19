@@ -9,5 +9,5 @@ Python scripts to automatically manages Fliip Gym Class Inscriptions Based on Se
     a. FLIIP_USERNAME
     b. FLIIP_PASSWORD
 
-## Buy me a coffee (or a beer)
-https://buymeacoffee.com/fcol95
+## Buy me a coffee ☕ (or a beer 🍺)
+[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/fcol95)
