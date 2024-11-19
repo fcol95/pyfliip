@@ -1,4 +1,4 @@
-# Register the user with login infos from "fliip_login.txt" to all the noon class of fliip_gym_name for days set true of noon_classes_to_register
+# %% Register the user with login infos from "fliip_login.txt" to all the noon class of fliip_gym_name for days set true of noon_classes_to_register
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -108,6 +108,17 @@ def register_noon_weekday_class(
         By.XPATH,
         f'//*[@id="{noon_class_id[weekday_to_register]},{calendar_page_weekday_str}"]/p/i',
     )
+
+    # Wait until the minutes of the hour are equal to the variable "wait_until_minutes"
+    print_in_while_loop = True
+    wait_until_minutes = 20
+    while True:
+        if print_in_while_loop:
+            print(f"Waiting for :{wait_until_minutes} minute")
+            print_in_while_loop = False
+        if datetime.now().minute == wait_until_minutes:
+            break
+    print(f"Waited until :{wait_until_minutes} minute")
     register_button.click()
 
     try:
