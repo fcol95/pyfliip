@@ -125,54 +125,30 @@ def register_noon_weekday_class(
         # Too far in future to register yet, return and skip
         return None, False
     calendar_page_weekday_str = calendar_page_weekday.strftime(f"%Y-%m-%d")
+    register_box = driver.find_element(
+        By.XPATH,
+        f'//*[@id="{noon_class_id[weekday_to_register]},{calendar_page_weekday_str}"]/p',
+    )
+
+    # Expected text in register box is "{Status}\nCrossFit Régulier\n12:00 - 13:00" where {Status} is "FULL", "Confirmed" or "X/Y" person suscribed.
+    if (
+        "confirmed" in register_box.text.lower()
+    ):  # Other beginning of text in button is "FULL" or X/Y
+        # Already registered, returning
+        return calendar_page_weekday, False
+
     register_button = driver.find_element(
         By.XPATH,
         f'//*[@id="{noon_class_id[weekday_to_register]},{calendar_page_weekday_str}"]/p/i',
     )
     register_button.click()
 
-    try:
-        # Register or Waiting List Modal Dialog
-        popup_window = wait.until(
-            EC.visibility_of_element_located((By.ID, "book_confirm_modal"))
-        )
-        title = driver.find_element(By.ID, "title")
-    except:
-        try:
-            # Cancel Registration Modal Dialog Type 1
-            popup_window_id = "modal-unregister"
-            popup_window = wait.until(
-                EC.visibility_of_element_located((By.ID, popup_window_id))
-            )
-            title = driver.find_element(By.ID, "unreg-title")
-        except:
-            # Cancel Registration Modal Dialog Type 2
-            popup_window_id = "myModal_unreg_waiting"
-            popup_window = wait.until(
-                EC.visibility_of_element_located((By.ID, popup_window_id))
-            )
-            title = driver.find_element(By.ID, "title3")
-
-    if "cancel" in title.text.lower():
-        # Already registered, close window and return
-        try:
-            close_button = wait.until(
-                EC.element_to_be_clickable(
-                    (By.XPATH, f'//*[@id="{popup_window_id}"]/div/div/div[1]/button')
-                )
-            )
-
-        except:
-            close_button = wait.until(
-                EC.element_to_be_clickable((By.CLASS_NAME, "close"))
-            )
-        close_button.click()
-
-        popup_window = wait.until(
-            EC.invisibility_of_element_located((By.ID, popup_window_id))
-        )
-
-        return calendar_page_weekday, False
+    # Register or Waiting List Modal Dialog
+    popup_window = wait.until(
+        EC.visibility_of_element_located((By.ID, "book_confirm_modal"))
+    )
+    title = driver.find_element(By.ID, "title")
+    # TODO: Implement sendind mail or warning if inscription needs payment!
 
     # Click on the class confirm button
     confirm_button = wait.until(
