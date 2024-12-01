@@ -25,7 +25,7 @@ noon_classes_to_register = {
     "Saturday": False,
     "Sunday": False,
 }
-headless = True  # Set to false if need to see the chrome driver window - for debugging
+headless = False  # Set to false if need to see the chrome driver window - for debugging
 
 
 # %% Get Login Infos
@@ -83,7 +83,17 @@ password_input.send_keys(Keys.RETURN)
 en_language_button = wait.until(
     EC.element_to_be_clickable((By.XPATH, '//*[@id="change_language"]/div/button'))
 )
-en_language_button.click()
+try:
+    en_language_button.click()
+except:
+    # Window to inform that google calendar can be syncronized probably popped up
+    close_button = driver.find_element(
+        By.CLASS_NAME,
+        "close",
+    )
+    close_button.click()
+    en_language_button.click()
+
 
 # %% Registering Loop
 
@@ -145,10 +155,17 @@ def register_noon_weekday_class(
 
     # Register or Waiting List Modal Dialog
     popup_window = wait.until(
-        EC.visibility_of_element_located((By.ID, "book_confirm_modal"))
+        EC.any_of(
+            EC.visibility_of_element_located((By.ID, "book_confirm_modal")),
+            EC.visibility_of_element_located((By.ID, "book_confirm_error_modal")),
+        )
     )
-    title = driver.find_element(By.ID, "title")
-    # TODO: Implement sendind mail or warning if inscription needs payment!
+    if (
+        "new membership"
+        in driver.find_element(By.ID, "book_confirm_error_modal").text.lower()
+    ):
+        raise RuntimeError("No more membership! Can't continue registering...")
+        # TODO: Implement sendind mail or warning if inscription needs payment!
 
     # Click on the class confirm button
     confirm_button = wait.until(
