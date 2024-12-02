@@ -25,7 +25,7 @@ noon_classes_to_register = {
     "Saturday": False,
     "Sunday": False,
 }
-headless = False  # Set to false if need to see the chrome driver window - for debugging
+headless = True  # Set to false if need to see the chrome driver window - for debugging
 
 
 # %% Get Login Infos
@@ -143,6 +143,7 @@ def register_noon_weekday_class(
     # Expected text in register box is "{Status}\nCrossFit Régulier\n12:00 - 13:00" where {Status} is "FULL", "Confirmed" or "X/Y" person suscribed.
     if (
         "confirmed" in register_box.text.lower()
+        or "waiting list" in register_box.text.lower()
     ):  # Other beginning of text in button is "FULL" or X/Y
         # Already registered, returning
         return calendar_page_weekday, False
