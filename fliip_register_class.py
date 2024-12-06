@@ -11,7 +11,6 @@ from selenium.webdriver.chrome.webdriver import (
 import dateutil.parser as parser
 from datetime import datetime, timedelta
 
-# import datetime
 import time
 import os
 
@@ -28,7 +27,7 @@ classes_to_register = {
     "Sunday": {"Register": False, "Time": "12:00"},
 }
 
-headless = False  # Set to false if need to see the chrome driver window - for debugging
+headless = True  # Set to false if need to see the chrome driver window - for debugging
 
 
 # %% Get Login Infos
