@@ -61,6 +61,7 @@ wait = WebDriverWait(driver, timeout=5)  # seconds
 driver.get(f"https://{fliip_gym_name}.fliipapp.com/home/login")
 
 # Wait for the page to load and click refuse all privacy button
+# TODO: Fix when the page "randomly" inform us about the Google calendar feature!
 reject_button = wait.until(
     EC.element_to_be_clickable(
         (By.XPATH, "/html/body/div[2]/div/div/div/div[2]/button[2]")
@@ -98,6 +99,16 @@ except:
 # %% Registering Loop
 
 
+def get_datetime_from_weekday(
+    weekday_to_register: int, current_calendar_page_date: datetime
+) -> datetime:
+    # Calculate how many days to subtract from current calandar page date to get to weekday
+    days_to_weekday = current_calendar_page_date.weekday() - weekday_to_register
+    calendar_page_weekday = current_calendar_page_date - timedelta(days=days_to_weekday)
+    calendar_page_weekday = calendar_page_weekday.replace(hour=12)  # Noon class
+    return calendar_page_weekday
+
+
 # Register to noon class function
 # Monday is weekday==0.
 # Return a tuple:
@@ -122,23 +133,28 @@ def register_noon_weekday_class(
             f"Unsupported weekday! (Noon class of weekday {weekday_to_register} without known ID!)"
         )
     # Click on the "+"" button on the date to register
-    # Calculate how many days to subtract from current calandar page date to get to weekday
-    days_to_weekday = current_calendar_page_date.weekday() - weekday_to_register
-    calendar_page_weekday = current_calendar_page_date - timedelta(days=days_to_weekday)
-    calendar_page_weekday = calendar_page_weekday.replace(hour=12)  # Noon class
-    if calendar_page_weekday < datetime.now():
+    class_datetime = get_datetime_from_weekday(
+        weekday_to_register=weekday_to_register,
+        current_calendar_page_date=current_calendar_page_date,
+    )
+
+    if class_datetime < datetime.now():
         # Class in the past, return and skip
         return None, False
     if (
-        calendar_page_weekday - datetime.now()
+        class_datetime - datetime.now()
     ).total_seconds() >= max_hours_in_future_to_register * 3600:
         # Too far in future to register yet, return and skip
         return None, False
-    calendar_page_weekday_str = calendar_page_weekday.strftime(f"%Y-%m-%d")
-    register_box = driver.find_element(
-        By.XPATH,
-        f'//*[@id="{noon_class_id[weekday_to_register]},{calendar_page_weekday_str}"]/p',
-    )
+    class_datetime_str = class_datetime.strftime(f"%Y-%m-%d")
+    try:
+        register_box = driver.find_element(
+            By.XPATH,
+            f'//*[@id="{noon_class_id[weekday_to_register]},{class_datetime_str}"]/p',
+        )
+    except Exception as e:
+        # TODO: Handle the case if no class for that day (e.g. Christmas 2024 "//*[@id="764296,2024-12-24"]/p")
+        raise e
 
     # Expected text in register box is "{Status}\nCrossFit Régulier\n12:00 - 13:00" where {Status} is "FULL", "Confirmed" or "X/Y" person suscribed.
     if (
@@ -146,11 +162,11 @@ def register_noon_weekday_class(
         or "waiting list" in register_box.text.lower()
     ):  # Other beginning of text in button is "FULL" or X/Y
         # Already registered, returning
-        return calendar_page_weekday, False
+        return class_datetime, False
 
     register_button = driver.find_element(
         By.XPATH,
-        f'//*[@id="{noon_class_id[weekday_to_register]},{calendar_page_weekday_str}"]/p/i',
+        f'//*[@id="{noon_class_id[weekday_to_register]},{class_datetime_str}"]/p/i',
     )
     register_button.click()
 
@@ -187,7 +203,7 @@ def register_noon_weekday_class(
         )
     )
     exit_button.click()
-    return calendar_page_weekday, True
+    return class_datetime, True
 
 
 print("\nRegistering", end="", flush=True)
@@ -195,6 +211,7 @@ print("\nRegistering", end="", flush=True)
 expected_date = datetime.now().date()
 
 registered_return_list: list[tuple[datetime | None, bool]] = []
+error_date_list: list[tuple[datetime, Exception]] = []
 # Change the calendar to two weeks later from now
 for x in range(0, 3):
     # Check current calendar week page date against expected date
@@ -216,11 +233,24 @@ for x in range(0, 3):
     for day in noon_classes_to_register:
         if noon_classes_to_register[day]:
             weekday_number = time.strptime(day, "%A").tm_wday
-            registered_return = register_noon_weekday_class(
-                driver=driver,
-                current_calendar_page_date=current_calendar_page_date,
-                weekday_to_register=weekday_number,
-            )
+            try:
+                registered_return = register_noon_weekday_class(
+                    driver=driver,
+                    current_calendar_page_date=current_calendar_page_date,
+                    weekday_to_register=weekday_number,
+                )
+            except Exception as e:
+                # TODO: Send notif about failed date?
+                error_date_list.append(
+                    (
+                        get_datetime_from_weekday(
+                            weekday_to_register=weekday_number,
+                            current_calendar_page_date=current_calendar_page_date,
+                        ),
+                        e,
+                    )
+                )
+                continue
             registered_return_list.append(registered_return)
             print(".", end="", flush=True)
 
@@ -247,3 +277,6 @@ for reg_datetime, just_registered in registered_return_list:
         print(
             f"\t{reg_datetime.strftime(f'%Y-%m-%d')} - {"New Registration" if just_registered else "Already Registered"}"
         )
+print("\nRegistration failed for dates:")
+for failed_datetime, exception in error_date_list:
+    print(f"\t{failed_datetime.strftime(f'%Y-%m-%d')} - Exception: {exception}")
