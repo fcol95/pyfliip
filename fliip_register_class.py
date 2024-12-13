@@ -245,5 +245,5 @@ print(
 for reg_datetime, just_registered in registered_return_list:
     if reg_datetime is not None:
         print(
-            f"\t{reg_datetime.strftime(f"%Y-%m-%d")} - {"New Registration" if just_registered else "Already Registered"}"
+            f"\t{reg_datetime.strftime(f'%Y-%m-%d')} - {"New Registration" if just_registered else "Already Registered"}"
         )
