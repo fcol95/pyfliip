@@ -15,6 +15,7 @@ import os
 
 # TODO: Move these variables to parse arg with main
 fliip_gym_name = "crossfitahuntsic"
+max_hours_in_future_to_register = 168
 
 noon_classes_to_register = {
     "Monday": False,
@@ -115,9 +116,8 @@ def get_datetime_from_weekday(
 # First field is a None if not registered, a datetime if registered.
 # Second field is True if just registered, false if already registered. Ignore if first field is none.
 def register_noon_weekday_class(
-    driver: WebDriver, weekday_to_register: int, current_calendar_page_date: datetime
+    driver: WebDriver, weekday_to_register: int, current_calendar_page_date: datetime, max_hours_in_future_to_register: int
 ) -> tuple[None | datetime, bool]:
-    max_hours_in_future_to_register = 336
     # Noon class id from the "class-block-action-icon subscribe-class-icon  class-action-top-lg" on-click register parameters
     noon_class_id = {
         0: "764284",  # Monday
@@ -212,8 +212,9 @@ expected_date = datetime.now().date()
 
 registered_return_list: list[tuple[datetime | None, bool]] = []
 error_date_list: list[tuple[datetime, Exception]] = []
-# Change the calendar to two weeks later from now
-for x in range(0, 3):
+# Loop for the max number of week in advance you can register too
+max_weeks_in_future_to_register = (max_hours_in_future_to_register / 24 / 7) + 1
+for week_ind in range(0, 3):
     # Check current calendar week page date against expected date
     # Format the expected date to the expected format
     expected_date_str = expected_date.strftime(f"%A %#d %b, %Y")
@@ -238,6 +239,7 @@ for x in range(0, 3):
                     driver=driver,
                     current_calendar_page_date=current_calendar_page_date,
                     weekday_to_register=weekday_number,
+                    max_hours_in_future_to_register=max_hours_in_future_to_register,
                 )
             except Exception as e:
                 # TODO: Send notif about failed date?
