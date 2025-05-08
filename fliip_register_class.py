@@ -37,7 +37,7 @@ if fliip_username is None or fliip_username == "":
 if fliip_password is None or fliip_password == "":
     raise ConnectionAbortedError("FLIIP_PASSWORD Environnement Variable Missing!")
 
-# %% Open Page
+# %% Open Login Page
 print(f"Connecting to {fliip_gym_name} Fliip page to log {fliip_username}...")
 
 # Set up the Chrome WebDriver (Make sure you have downloaded chromedriver)
@@ -62,13 +62,16 @@ wait = WebDriverWait(driver, timeout=5)  # seconds
 driver.get(f"https://{fliip_gym_name}.fliipapp.com/home/login")
 
 # Wait for the page to load and click refuse all privacy button
-# TODO: Fix when the page "randomly" inform us about the Google calendar feature!
-reject_button = wait.until(
-    EC.element_to_be_clickable(
-        (By.XPATH, "/html/body/div[2]/div/div/div/div[2]/button[2]")
+try:
+    reject_button = wait.until(
+        EC.element_to_be_clickable(
+            (By.XPATH, "/html/body/div[2]/div/div/div/div[2]/button[2]")
+        )
     )
-)
-reject_button.click()
+    reject_button.click()
+except:
+    # Privacy window not present, continue
+    pass
 
 # %% Login on Fliip
 # Find the username and password input fields and log in
@@ -81,25 +84,31 @@ password_input.send_keys(fliip_password)  # Replace with your actual password
 # Submit the form
 password_input.send_keys(Keys.RETURN)
 
-# Wait to the login to occur and change to English to properly parse date strings
-en_language_button = wait.until(
-    EC.element_to_be_clickable((By.XPATH, '//*[@id="change_language"]/div/button'))
-)
+# %% Wait to the login to occur and change to English to properly parse date strings
 try:
-    en_language_button.click()
-except:
     # Window to inform that google calendar can be syncronized probably popped up
     close_button = driver.find_element(
         By.CLASS_NAME,
         "close",
     )
     close_button.click()
-    en_language_button.click()
+except Exception as e:
+    # No window to close, continue
+    pass
+
+language_button = wait.until(
+    EC.element_to_be_clickable((By.XPATH, '//*[@id="change_language"]/div/button'))
+)
+language_button.click()  # First click on the button to open the language menu
+en_language_button = wait.until(
+    EC.element_to_be_clickable(
+        (By.XPATH, '//*[@id="change_language"]/div/div/ul/li[1]/a')
+    )
+)
+en_language_button.click()  # Click on the english button
 
 
 # %% Registering Loop
-
-
 def get_datetime_from_weekday(
     weekday_to_register: int, current_calendar_page_date: datetime
 ) -> datetime:
@@ -116,7 +125,10 @@ def get_datetime_from_weekday(
 # First field is a None if not registered, a datetime if registered.
 # Second field is True if just registered, false if already registered. Ignore if first field is none.
 def register_noon_weekday_class(
-    driver: WebDriver, weekday_to_register: int, current_calendar_page_date: datetime, max_hours_in_future_to_register: int
+    driver: WebDriver,
+    weekday_to_register: int,
+    current_calendar_page_date: datetime,
+    max_hours_in_future_to_register: int,
 ) -> tuple[None | datetime, bool]:
     # Noon class id from the "class-block-action-icon subscribe-class-icon  class-action-top-lg" on-click register parameters
     noon_class_id = {
@@ -181,8 +193,17 @@ def register_noon_weekday_class(
         "new membership"
         in driver.find_element(By.ID, "book_confirm_error_modal").text.lower()
     ):
-        raise RuntimeError("No more membership! Can't continue registering...")
         # TODO: Implement sendind mail or warning if inscription needs payment!
+        cancel_subscribe_btn = wait.until(
+            EC.element_to_be_clickable(
+                (
+                    By.XPATH,
+                    '//*[@id="book_confirm_error_modal"]/div/div/div[2]/button[1]',
+                )
+            )
+        )
+        cancel_subscribe_btn.click()
+        raise RuntimeError("No more membership! Can't continue registering...")
 
     # Click on the class confirm button
     confirm_button = wait.until(
@@ -213,8 +234,8 @@ expected_date = datetime.now().date()
 registered_return_list: list[tuple[datetime | None, bool]] = []
 error_date_list: list[tuple[datetime, Exception]] = []
 # Loop for the max number of week in advance you can register too
-max_weeks_in_future_to_register = (max_hours_in_future_to_register / 24 / 7) + 1
-for week_ind in range(0, 3):
+max_weeks_in_future_to_register = int((max_hours_in_future_to_register / 24 / 7) + 1)
+for week_ind in range(0, max_weeks_in_future_to_register):
     # Check current calendar week page date against expected date
     # Format the expected date to the expected format
     expected_date_str = expected_date.strftime(f"%A %#d %b, %Y")
