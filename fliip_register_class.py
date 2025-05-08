@@ -9,6 +9,7 @@ from selenium.webdriver.chrome.webdriver import (
 )  # For typing of function attributes
 
 import dateutil.parser as parser
+
 from datetime import datetime, timedelta
 import time
 import os
