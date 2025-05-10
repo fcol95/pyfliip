@@ -1,4 +1,4 @@
-# Imports
+## Imports
 # Standard Library Imports
 from datetime import datetime, timedelta
 import time
@@ -18,6 +18,7 @@ from selenium.webdriver.chrome.webdriver import (
 import dateutil.parser as parser
 
 
+# Object to hold the Selenium WebDriver and WebDriverWait
 @dataclass
 class WebHandle(object):
     driver: WebDriver
@@ -28,6 +29,7 @@ class WebHandle(object):
         self.driver.quit()
 
 
+# Get a WebHandle object for the selenium chrome webdriver and WebDriverWait
 def get_web_web_handle(
     headless: bool,
     web_timeout: float,
@@ -59,7 +61,66 @@ def get_web_web_handle(
     return WebHandle(driver=driver, wait=wait)
 
 
-# Registering Loop
+# Login to the Fliip gym web page and set the language to English for proper parsing of date strings
+def fliip_web_page_login(
+    web_handle: WebHandle,
+    fliip_gym_name: str,
+    fliip_username: str,
+    fliip_password: str,
+) -> None:
+    # Go to the Fliip login page
+    web_handle.driver.get(f"https://{fliip_gym_name}.fliipapp.com/home/login")
+
+    # Wait for the page to load and click refuse all privacy button
+    try:
+        reject_button = web_handle.wait.until(
+            EC.element_to_be_clickable(
+                (By.XPATH, "/html/body/div[2]/div/div/div/div[2]/button[2]")
+            )
+        )
+        reject_button.click()
+    except:
+        # Privacy window not present, continue
+        # TODO: Improve this first step in case of no privacy window, not wait timeout period?
+        pass
+
+    # Login on Fliip
+    # Find the username and password input fields and log in
+    username_input = web_handle.driver.find_element(By.ID, "username")
+    password_input = web_handle.driver.find_element(By.ID, "password")
+
+    username_input.send_keys(fliip_username)  # Replace with your actual username
+    password_input.send_keys(fliip_password)  # Replace with your actual password
+
+    # Submit the form
+    password_input.send_keys(Keys.RETURN)
+
+    # Wait to the login to occur and change to English to properly parse date strings
+    try:
+        # Window to inform that google calendar can be syncronized probably popped up
+        close_button = web_handle.driver.find_element(
+            By.CLASS_NAME,
+            "close",
+        )
+        close_button.click()
+    except Exception as e:
+        # No window to close, continue
+        pass
+
+    language_button = web_handle.wait.until(
+        EC.element_to_be_clickable((By.XPATH, '//*[@id="change_language"]/div/button'))
+    )
+    language_button.click()  # First click on the button to open the language menu
+    en_language_button = web_handle.wait.until(
+        EC.element_to_be_clickable(
+            (By.XPATH, '//*[@id="change_language"]/div/div/ul/li[1]/a')
+        )
+    )
+    en_language_button.click()  # Click on the english button
+    return
+
+
+# Helper function to get the datetime of the class weekday to register
 def get_datetime_from_weekday(
     weekday_to_register: int,
     current_calendar_page_date: datetime,
@@ -179,63 +240,6 @@ def register_noon_weekday_class(
     )
     exit_button.click()
     return class_datetime, True
-
-
-def fliip_web_page_login(
-    web_handle: WebHandle,
-    fliip_gym_name: str,
-    fliip_username: str,
-    fliip_password: str,
-) -> None:
-    # Go to the Fliip login page
-    web_handle.driver.get(f"https://{fliip_gym_name}.fliipapp.com/home/login")
-
-    # Wait for the page to load and click refuse all privacy button
-    try:
-        reject_button = web_handle.wait.until(
-            EC.element_to_be_clickable(
-                (By.XPATH, "/html/body/div[2]/div/div/div/div[2]/button[2]")
-            )
-        )
-        reject_button.click()
-    except:
-        # Privacy window not present, continue
-        # TODO: Improve this first step in case of no privacy window, not wait timeout period?
-        pass
-
-    # Login on Fliip
-    # Find the username and password input fields and log in
-    username_input = web_handle.driver.find_element(By.ID, "username")
-    password_input = web_handle.driver.find_element(By.ID, "password")
-
-    username_input.send_keys(fliip_username)  # Replace with your actual username
-    password_input.send_keys(fliip_password)  # Replace with your actual password
-
-    # Submit the form
-    password_input.send_keys(Keys.RETURN)
-
-    # Wait to the login to occur and change to English to properly parse date strings
-    try:
-        # Window to inform that google calendar can be syncronized probably popped up
-        close_button = web_handle.driver.find_element(
-            By.CLASS_NAME,
-            "close",
-        )
-        close_button.click()
-    except Exception as e:
-        # No window to close, continue
-        pass
-
-    language_button = web_handle.wait.until(
-        EC.element_to_be_clickable((By.XPATH, '//*[@id="change_language"]/div/button'))
-    )
-    language_button.click()  # First click on the button to open the language menu
-    en_language_button = web_handle.wait.until(
-        EC.element_to_be_clickable(
-            (By.XPATH, '//*[@id="change_language"]/div/div/ul/li[1]/a')
-        )
-    )
-    en_language_button.click()  # Click on the english button
 
 
 def main(
