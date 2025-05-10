@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import time
 import os
 from dataclasses import dataclass
+import logging
 
 # Third Party Imports
 from selenium import webdriver
@@ -16,6 +17,29 @@ from selenium.webdriver.chrome.webdriver import (
 )  # For typing of function attributes
 
 import dateutil.parser as parser
+
+# Configure logging
+# Common logging config
+logging_common_formatting_string = "%(asctime)s - %(levelname)s - %(message)s"
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)  # Set the logger level to DEBUG
+
+# Logging file handler config (logs to a file)
+logging_file_path = "fliip_register.log"  # Default log file path
+logging_file_handler = logging.FileHandler(logging_file_path)
+logging_file_handler.setLevel(logging.INFO)  # Log only errors and above to the file
+logging_file_formatter = logging.Formatter(logging_common_formatting_string)
+logging_file_handler.setFormatter(logging_file_formatter)
+
+# Logging stream handler config (logs to the console)
+logging_stream_handler = logging.StreamHandler()
+logging_stream_handler.setLevel(logging.INFO)  # Log info and above to the console
+logging_stream_formatter = logging.Formatter(logging_common_formatting_string)
+logging_stream_handler.setFormatter(logging_stream_formatter)
+
+# Add handlers to the logger
+logger.addHandler(logging_file_handler)
+logger.addHandler(logging_stream_handler)
 
 
 # Object to hold the Selenium WebDriver and WebDriverWait
@@ -40,6 +64,7 @@ def get_web_web_handle(
     :param web_timeout: The timeout for the webdriver.
     :return: A WebHandle object containing the driver and wait objects.
     """
+    logger.debug("Getting browser handle...")
     # Set up the Chrome WebDriver (Make sure you have downloaded chromedriver)
     options = webdriver.ChromeOptions()
     """
@@ -68,7 +93,11 @@ def fliip_web_page_login(
     fliip_username: str,
     fliip_password: str,
 ) -> None:
+    logger.info(
+        f"Connecting {fliip_username} to {fliip_gym_name} Fliip Gym Web Page..."
+    )
     # Go to the Fliip login page
+    logger.debug("Opening Fliip gym web page...")
     web_handle.driver.get(f"https://{fliip_gym_name}.fliipapp.com/home/login")
 
     # Wait for the page to load and click refuse all privacy button
@@ -82,9 +111,13 @@ def fliip_web_page_login(
     except:
         # Privacy window not present, continue
         # TODO: Improve this first step in case of no privacy window, not wait timeout period?
+        logger.warning(
+            "Privacy window not present, continuing to login..."
+        )  # Warning to see occurence of this window
         pass
 
     # Login on Fliip
+    logger.debug("Logging onto Fliip gym web page...")
     # Find the username and password input fields and log in
     username_input = web_handle.driver.find_element(By.ID, "username")
     password_input = web_handle.driver.find_element(By.ID, "password")
@@ -103,10 +136,14 @@ def fliip_web_page_login(
             "close",
         )
         close_button.click()
+        logger.warning(
+            "Google Calendar sync info window detected and closed!"
+        )  # Warning to see occurence of this window
     except Exception as e:
         # No window to close, continue
         pass
 
+    logger.debug("Logged in, changing language to english...")
     language_button = web_handle.wait.until(
         EC.element_to_be_clickable((By.XPATH, '//*[@id="change_language"]/div/button'))
     )
@@ -117,32 +154,41 @@ def fliip_web_page_login(
         )
     )
     en_language_button.click()  # Click on the english button
+    logger.debug("Connected!")
     return
 
 
 # Helper function to get the datetime of the class weekday to register
-def get_datetime_from_weekday(
-    weekday_to_register: int,
+def get_datetime_from_weekday_str(
+    weekday_to_register_str: str,
     current_calendar_page_date: datetime,
 ) -> datetime:
     # Calculate how many days to subtract from current calandar page date to get to weekday
-    days_to_weekday = current_calendar_page_date.weekday() - weekday_to_register
+    weekday_to_register_number = time.strptime(weekday_to_register_str, "%A").tm_wday
+    days_to_weekday = current_calendar_page_date.weekday() - weekday_to_register_number
     calendar_page_weekday = current_calendar_page_date - timedelta(days=days_to_weekday)
     calendar_page_weekday = calendar_page_weekday.replace(hour=12)  # Noon class
     return calendar_page_weekday
 
 
+class OutOfMembershipError(RuntimeError):
+    """Custom exception raised when the user is out of membership."""
+
+    def __init__(
+        self,
+        message="No more membership available on account! Can't continue registering...",
+    ):
+        super().__init__(message)
+
+
 # Register to noon class function
 # Monday is weekday==0.
-# Return a tuple:
-# First field is a None if not registered, a datetime if registered.
-# Second field is True if just registered, false if already registered. Ignore if first field is none.
+# Return true if just registered, false if already registered, none if skipped.
 def register_noon_weekday_class(
     web_handle: WebHandle,
-    weekday_to_register: int,
-    current_calendar_page_date: datetime,
+    day_to_register_datetime: datetime,
     max_hours_in_future_to_register: int,
-) -> tuple[None | datetime, bool]:
+) -> bool | None:
     # Noon class id from the "class-block-action-icon subscribe-class-icon  class-action-top-lg" on-click register parameters
     noon_class_id = {
         0: "764284",  # Monday
@@ -153,25 +199,22 @@ def register_noon_weekday_class(
         5: "TBD",  # Saturday
         6: "TBD",  # Sunday
     }
+    weekday_to_register = day_to_register_datetime.weekday()
+
     if noon_class_id[weekday_to_register] == "TBD":
         raise NotImplementedError(
             f"Unsupported weekday! (Noon class of weekday {weekday_to_register} without known ID!)"
         )
-    # Click on the "+"" button on the date to register
-    class_datetime = get_datetime_from_weekday(
-        weekday_to_register=weekday_to_register,
-        current_calendar_page_date=current_calendar_page_date,
-    )
-
-    if class_datetime < datetime.now():
+    if day_to_register_datetime < datetime.now():
         # Class in the past, return and skip
-        return None, False
+        return None
     if (
-        class_datetime - datetime.now()
+        day_to_register_datetime - datetime.now()
     ).total_seconds() >= max_hours_in_future_to_register * 3600:
         # Too far in future to register yet, return and skip
-        return None, False
-    class_datetime_str = class_datetime.strftime(f"%Y-%m-%d")
+        return None
+    class_datetime_str = day_to_register_datetime.strftime(f"%Y-%m-%d")
+    # Click on the "+"" button on the date to register
     try:
         register_box = web_handle.driver.find_element(
             By.XPATH,
@@ -179,7 +222,9 @@ def register_noon_weekday_class(
         )
     except Exception as e:
         # TODO: Handle the case if no class for that day (e.g. Christmas 2024 "//*[@id="764296,2024-12-24"]/p")
-        raise e
+        raise Exception(
+            f"Can't find a noon class to register on {class_datetime_str}! Original Exception: {e}"
+        )
 
     # Expected text in register box is "{Status}\nCrossFit Régulier\n12:00 - 13:00" where {Status} is "FULL", "Confirmed" or "X/Y" person suscribed.
     if (
@@ -187,7 +232,7 @@ def register_noon_weekday_class(
         or "waiting list" in register_box.text.lower()
     ):  # Other beginning of text in button is "FULL" or X/Y
         # Already registered, returning
-        return class_datetime, False
+        return False
 
     register_button = web_handle.driver.find_element(
         By.XPATH,
@@ -218,7 +263,7 @@ def register_noon_weekday_class(
             )
         )
         cancel_subscribe_btn.click()
-        raise RuntimeError("No more membership! Can't continue registering...")
+        raise OutOfMembershipError()
 
     # Click on the class confirm button
     confirm_button = web_handle.wait.until(
@@ -239,7 +284,7 @@ def register_noon_weekday_class(
         )
     )
     exit_button.click()
-    return class_datetime, True
+    return True
 
 
 def main(
@@ -255,7 +300,6 @@ def main(
     web_handle = get_web_web_handle(headless=headless, web_timeout=web_timeout)
 
     # Login to Fliip Gym Web Page
-    print(f"Connecting to {fliip_gym_name} Fliip page to log {fliip_username}...")
     fliip_web_page_login(
         web_handle=web_handle,
         fliip_gym_name=fliip_gym_name,
@@ -263,7 +307,8 @@ def main(
         fliip_password=fliip_password,
     )
 
-    print("\nRegistering", end="", flush=True)
+    # Registering Loop
+    logger.info("Starting Registering loop...")
     # Date in week scrolling header should be today at calendar page first loading
     expected_date = datetime.now().date()
 
@@ -284,40 +329,49 @@ def main(
                     (By.ID, "current-date"), expected_date_str
                 )
             )
-            if not current_date_correct:
-                raise RuntimeError(f"Unexpected page! (expected {expected_date_str})")
         except:
-            raise RuntimeError(f"Unexpected page! (expected {expected_date_str})")
+            current_date_correct = False
+        if not current_date_correct:
+            raise RuntimeError(
+                f"Unexpected calendar page! (expected {expected_date_str})"
+            )
+        logger.debug(f"Registering for week: {expected_date_str}...")
         # Get current calendar page date
         current_calendar_page_date = web_handle.driver.find_element(
             By.ID, "current-date"
         )
         current_calendar_page_date = parser.parse(current_calendar_page_date.text)
 
-        for day in noon_classes_to_register:
-            if noon_classes_to_register[day]:
-                weekday_number = time.strptime(day, "%A").tm_wday
+        for weekday_str in noon_classes_to_register:
+            if noon_classes_to_register[weekday_str]:
+                logger.debug(f"Registering for {weekday_str}...")
+                day_to_register_datetime = get_datetime_from_weekday_str(
+                    weekday_to_register_str=weekday_str,
+                    current_calendar_page_date=current_calendar_page_date,
+                )  # TODO: use day_to_register_datetime as argument to register_noon_weekday_class instead
                 try:
                     registered_return = register_noon_weekday_class(
                         web_handle=web_handle,
-                        current_calendar_page_date=current_calendar_page_date,
-                        weekday_to_register=weekday_number,
+                        day_to_register_datetime=day_to_register_datetime,
                         max_hours_in_future_to_register=max_hours_in_future_to_register,
                     )
                 except Exception as e:
                     # TODO: Send notif about failed date?
                     error_date_list.append(
                         (
-                            get_datetime_from_weekday(
-                                weekday_to_register=weekday_number,
-                                current_calendar_page_date=current_calendar_page_date,
-                            ),
+                            day_to_register_datetime,
                             e,
                         )
                     )
+                    logger.error(
+                        f"Registration failed for {day_to_register_datetime.strftime(f'%Y-%m-%d')} - Exception: {e}."
+                    )
                     continue
-                registered_return_list.append(registered_return)
-                print(".", end="", flush=True)
+                if registered_return is not None:
+                    logger.info(
+                        f"Registration done for {day_to_register_datetime.strftime(f'%Y-%m-%d')} noon class - {'New Registration' if registered_return else 'Already Registered'}."
+                    )
+                    registered_return_list.append(day_to_register_datetime)
 
         # Change the calendar week page to next week
         # Find and click the next week button
@@ -332,18 +386,6 @@ def main(
             pass
         # Add a week for the next expected date
         expected_date = expected_date + timedelta(days=7)
-
-    print(
-        f"\nRegistration done for user {fliip_username} at gym {fliip_gym_name} for noon classes of dates:"
-    )
-    for reg_datetime, just_registered in registered_return_list:
-        if reg_datetime is not None:
-            print(
-                f"\t{reg_datetime.strftime(f'%Y-%m-%d')} - {"New Registration" if just_registered else "Already Registered"}"
-            )
-    print("\nRegistration failed for dates:")
-    for failed_datetime, exception in error_date_list:
-        print(f"\t{failed_datetime.strftime(f'%Y-%m-%d')} - Exception: {exception}")
 
 
 if __name__ == "__main__":
@@ -371,12 +413,14 @@ if __name__ == "__main__":
         raise ConnectionAbortedError("FLIIP_USERNAME Environnement Variable Missing!")
     if fliip_password is None or fliip_password == "":
         raise ConnectionAbortedError("FLIIP_PASSWORD Environnement Variable Missing!")
-
-    main(
-        fliip_gym_name=fliip_gym_name,
-        fliip_username=fliip_username,
-        fliip_password=fliip_password,
-        max_hours_in_future_to_register=max_hours_in_future_to_register,
-        noon_classes_to_register=noon_classes_to_register,
-        headless=headless,
-    )
+    try:
+        main(
+            fliip_gym_name=fliip_gym_name,
+            fliip_username=fliip_username,
+            fliip_password=fliip_password,
+            max_hours_in_future_to_register=max_hours_in_future_to_register,
+            noon_classes_to_register=noon_classes_to_register,
+            headless=headless,
+        )
+    except Exception as e:
+        logger.error(f"Failed to run Fliip registering main: {e}.")
