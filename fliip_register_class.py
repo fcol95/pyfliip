@@ -17,6 +17,11 @@ from selenium.webdriver.chrome.webdriver import (
 )  # For typing of function attributes
 
 import dateutil.parser as parser
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
 # Configure logging
 # Common logging config
@@ -328,14 +333,72 @@ def register_noon_weekday_class(
     return True
 
 
+def send_log_file_via_email(
+    log_file_path: str,
+    recipient_email: str,
+    sender_email: str,
+    sender_password: str,
+):
+    """
+    Send the log file via email.
+
+    :param log_file_path: Path to the log file.
+    :param recipient_email: Email address to send the log file to.
+    :param sender_email: Sender's email address.
+    :param sender_password: Sender's email password.
+    """
+    if not sender_email.endswith("@gmail.com"):
+        error_msg = f"Sender email {sender_email} is not a Gmail address. Email sending aborted."
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    try:
+        # Create the email
+        subject = "Fliip Registering Errors Log"
+        body = "Please find attached the log file containing errors during the registration process."
+
+        msg = MIMEMultipart()
+        msg["From"] = sender_email
+        msg["To"] = recipient_email
+        msg["Subject"] = subject
+
+        msg.attach(MIMEText(body, "plain"))
+
+        # Attach the log file
+        with open(log_file_path, "rb") as attachment:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(attachment.read())
+        encoders.encode_base64(part)
+        part.add_header(
+            "Content-Disposition",
+            f"attachment; filename={os.path.basename(log_file_path)}",
+        )
+        msg.attach(part)
+
+        # Send the email
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, recipient_email, msg.as_string())
+
+        logger.info("Log file sent via email successfully.")
+    except Exception as e:
+        logger.error(
+            f"Failed to send log file via email from {sender_email} to {recipient_email}: {e}"
+        )
+
+
 def main(
     fliip_gym_name: str,
     fliip_username: str,
     fliip_password: str,
     max_hours_in_future_to_register: int,
     noon_classes_to_register: dict[str, bool],
+    recipient_email: str | None = None,
+    sender_email: str | None = None,
+    sender_password: str | None = None,
     headless: bool = True,
     web_timeout: float = 5.0,
+    force_send_log_email: bool = False,
 ):
     # Get the browser handle
     web_handle = get_web_web_handle(headless=headless, web_timeout=web_timeout)
@@ -428,6 +491,22 @@ def main(
         # Add a week for the next expected date
         expected_date = expected_date + timedelta(days=7)
 
+    if (
+        (len(error_date_list) > 0 or force_send_log_email)
+        and recipient_email is not None
+        and sender_email is not None
+        and sender_password is not None
+    ):
+        logger.info(
+            f"At least one date failed to register, sending log to {recipient_email}..."
+        )
+        send_log_file_via_email(
+            log_file_path=logging_file_path,
+            recipient_email=recipient_email,
+            sender_email=sender_email,
+            sender_password=sender_password,
+        )
+
 
 if __name__ == "__main__":
     clean_old_log_entries(logging_file_path)
@@ -456,6 +535,15 @@ if __name__ == "__main__":
         raise ConnectionAbortedError("FLIIP_USERNAME Environnement Variable Missing!")
     if fliip_password is None or fliip_password == "":
         raise ConnectionAbortedError("FLIIP_PASSWORD Environnement Variable Missing!")
+
+    recipient_email = os.getenv("FLIIP_RECIPIENT_EMAIL")  # Optional, can be None
+    sender_email = os.getenv(
+        "FLIIP_SENDER_EMAIL"
+    )  # Optional, can be None. Needs to be a Gmail address
+    sender_password = os.getenv(
+        "FLIIP_SENDER_PASSWORD"
+    )  # Optional, can be None. Needs to be the gmail address token for SMTP.
+
     try:
         main(
             fliip_gym_name=fliip_gym_name,
@@ -463,6 +551,9 @@ if __name__ == "__main__":
             fliip_password=fliip_password,
             max_hours_in_future_to_register=max_hours_in_future_to_register,
             noon_classes_to_register=noon_classes_to_register,
+            recipient_email=recipient_email,
+            sender_email=sender_email,
+            sender_password=sender_password,
             headless=headless,
         )
     except Exception as e:
