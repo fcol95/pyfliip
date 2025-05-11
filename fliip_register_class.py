@@ -20,7 +20,9 @@ import dateutil.parser as parser
 
 # Configure logging
 # Common logging config
-logging_common_formatting_string = "%(asctime)s - %(levelname)s - %(message)s"
+logging_common_formatting_string = (
+    "%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
+)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)  # Set the logger level to DEBUG
 
@@ -40,6 +42,45 @@ logging_stream_handler.setFormatter(logging_stream_formatter)
 # Add handlers to the logger
 logger.addHandler(logging_file_handler)
 logger.addHandler(logging_stream_handler)
+
+
+def clean_old_log_entries(
+    log_file_path: str,
+    days_threshold: int = 31,
+) -> None:
+    """
+    Remove log entries older than the specified threshold from the log file.
+
+    :param log_file_path: Path to the log file.
+    :param days_threshold: Number of days to keep log entries.
+    """
+    try:
+        threshold_date = datetime.now() - timedelta(days=days_threshold)
+        with open(log_file_path, "r") as log_file:
+            lines = log_file.readlines()
+
+        # Filter log entries based on the threshold
+        recent_lines = []
+        for line in lines:
+            try:
+                # Extract the timestamp from the log entry
+                timestamp_str = line.split(" - ")[0]
+                log_date = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S,%f")
+                if log_date >= threshold_date:
+                    recent_lines.append(line)
+            except (ValueError, IndexError):
+                # If the line doesn't match the expected format, keep it (e.g., header lines)
+                recent_lines.append(line)
+
+        # Rewrite the log file with recent entries
+        with open(log_file_path, "w") as log_file:
+            log_file.writelines(recent_lines)
+
+        logger.debug(
+            f"Old log entries older than {days_threshold} days ({threshold_date}) have been cleaned."
+        )
+    except Exception as e:
+        logger.error(f"Failed to clean old log entries: {e}")
 
 
 # Object to hold the Selenium WebDriver and WebDriverWait
@@ -389,6 +430,8 @@ def main(
 
 
 if __name__ == "__main__":
+    clean_old_log_entries(logging_file_path)
+
     # TODO: Get these variables from console arguments or environment variables?
     fliip_gym_name = "crossfitahuntsic"
     max_hours_in_future_to_register = 168
