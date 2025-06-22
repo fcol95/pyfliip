@@ -49,9 +49,11 @@ logging_stream_handler.setFormatter(logging_stream_formatter)
 logger.addHandler(logging_file_handler)
 logger.addHandler(logging_stream_handler)
 
+
 def weekday_short_str(dt: datetime) -> str:
     """Return three-letter lowercase weekday string for a datetime (e.g., 'mon', 'tue')."""
     return calendar.day_abbr[dt.weekday()].lower()
+
 
 def clean_old_log_entries(
     log_file_path: str,
@@ -218,7 +220,9 @@ def get_datetime_from_weekday_str(
     weekday_to_register_number = time.strptime(weekday_to_register_str, "%A").tm_wday
     days_to_weekday = current_calendar_page_date.weekday() - weekday_to_register_number
     calendar_page_weekday = current_calendar_page_date - timedelta(days=days_to_weekday)
-    calendar_page_weekday = calendar_page_weekday.replace(hour=hour_to_register)  # Noon class
+    calendar_page_weekday = calendar_page_weekday.replace(
+        hour=hour_to_register
+    )  # Noon class
     return calendar_page_weekday
 
 
@@ -231,13 +235,11 @@ class OutOfMembershipError(RuntimeError):
     ):
         super().__init__(message)
 
+
 class ClassCanceledError(RuntimeError):
     """Custom exception raised when the gym has cancelled that class!"""
 
-    def __init__(
-        self,
-        message="Gym has canceled the class, can't register!"
-    ):
+    def __init__(self, message="Gym has canceled the class, can't register!"):
         super().__init__(message)
 
 
@@ -247,7 +249,7 @@ class ClassCanceledError(RuntimeError):
 def register_to_class(
     web_handle: WebHandle,
     datetime_to_register: datetime,
-    max_hours_in_future_to_register: int = 31*24,  # Default to 31 days in hours
+    max_hours_in_future_to_register: int = 31 * 24,  # Default to 31 days in hours
 ) -> bool | None:
     if datetime_to_register < datetime.now():
         # Class in the past, return and skip
@@ -258,14 +260,14 @@ def register_to_class(
         # Too far in future to register yet, return and skip
         return None
     class_day_datetime_str = datetime_to_register.strftime(f"%Y-%m-%d")
-    time_str =datetime_to_register.strftime(f"%H:%M") # Class time to register.
+    time_str = datetime_to_register.strftime(f"%H:%M")  # Class time to register.
     class_datetime_weekday_str = weekday_short_str(datetime_to_register)
     # Click on the "+"" button on the date to register
     class_noon_xpath = (
         f"//td[contains(@class, '{class_datetime_weekday_str}') and @data-classdate='{class_day_datetime_str}']"
         f"//div[contains(@class, 'table-chk') and contains(@id, '{class_day_datetime_str}')]"
         f"//span[contains(@class, 'class_time') and contains(text(), '{time_str}')]"
-        f"/ancestor::div[contains(@class, 'table-chk')]" # Go up to the parent div of the class time span
+        f"/ancestor::div[contains(@class, 'table-chk')]"  # Go up to the parent div of the class time span
     )
 
     try:
@@ -281,14 +283,12 @@ def register_to_class(
 
     # Expected text in register box is "{Status}\nCrossFit Régulier\n{class start hour}:00 - {class end hour}:00" where {Status} is "FULL", "Confirmed", "Canceled", or "X/Y" person suscribed.
     if (
-        "confirm" in register_box.text.lower()
-        or "waiting" in register_box.text.lower()
+        "confirm" in register_box.text.lower() or "waiting" in register_box.text.lower()
     ):  # Other beginning of text in button is "FULL" or X/Y
         # Already registered, returning
         return False
     elif "cancel" in register_box.text.lower():
         raise ClassCanceledError()
-
 
     register_button = register_box.find_element(
         By.XPATH,
@@ -394,6 +394,7 @@ def send_log_file_via_email(
         logger.error(
             f"Failed to send log file via email from {sender_email} to {recipient_email}: {e}"
         )
+
 
 def main(
     fliip_gym_name: str,
@@ -531,7 +532,7 @@ if __name__ == "__main__":
         "Monday": [],
         "Tuesday": [12],
         "Wednesday": [],
-        "Thursday": [12,16],
+        "Thursday": [12],
         "Friday": [],
         "Saturday": [],
         "Sunday": [],
