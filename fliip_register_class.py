@@ -5,6 +5,7 @@ import time
 import os
 from dataclasses import dataclass
 import logging
+import calendar
 
 # Third Party Imports
 from selenium import webdriver
@@ -48,6 +49,9 @@ logging_stream_handler.setFormatter(logging_stream_formatter)
 logger.addHandler(logging_file_handler)
 logger.addHandler(logging_stream_handler)
 
+def weekday_short_str(dt: datetime) -> str:
+    """Return three-letter lowercase weekday string for a datetime (e.g., 'mon', 'tue')."""
+    return calendar.day_abbr[dt.weekday()].lower()
 
 def clean_old_log_entries(
     log_file_path: str,
@@ -207,13 +211,14 @@ def fliip_web_page_login(
 # Helper function to get the datetime of the class weekday to register
 def get_datetime_from_weekday_str(
     weekday_to_register_str: str,
+    hour_to_register: int,
     current_calendar_page_date: datetime,
 ) -> datetime:
     # Calculate how many days to subtract from current calandar page date to get to weekday
     weekday_to_register_number = time.strptime(weekday_to_register_str, "%A").tm_wday
     days_to_weekday = current_calendar_page_date.weekday() - weekday_to_register_number
     calendar_page_weekday = current_calendar_page_date - timedelta(days=days_to_weekday)
-    calendar_page_weekday = calendar_page_weekday.replace(hour=12)  # Noon class
+    calendar_page_weekday = calendar_page_weekday.replace(hour=hour_to_register)  # Noon class
     return calendar_page_weekday
 
 
@@ -226,63 +231,68 @@ class OutOfMembershipError(RuntimeError):
     ):
         super().__init__(message)
 
+class ClassCanceledError(RuntimeError):
+    """Custom exception raised when the gym has cancelled that class!"""
 
-# Register to noon class function
-# Monday is weekday==0.
+    def __init__(
+        self,
+        message="Gym has canceled the class, can't register!"
+    ):
+        super().__init__(message)
+
+
+# Register to class function
+# Datetime needs to have class day and hour.
 # Return true if just registered, false if already registered, none if skipped.
-def register_noon_weekday_class(
+def register_to_class(
     web_handle: WebHandle,
-    day_to_register_datetime: datetime,
-    max_hours_in_future_to_register: int,
+    datetime_to_register: datetime,
+    max_hours_in_future_to_register: int = 31*24,  # Default to 31 days in hours
 ) -> bool | None:
-    # Noon class id from the "class-block-action-icon subscribe-class-icon  class-action-top-lg" on-click register parameters
-    noon_class_id = {
-        0: "764284",  # Monday
-        1: "764296",  # Tuesday
-        2: "764307",  # Wednesday
-        3: "755904",  # Thursday
-        4: "764327",  # Friday
-        5: "TBD",  # Saturday
-        6: "TBD",  # Sunday
-    }
-    weekday_to_register = day_to_register_datetime.weekday()
-
-    if noon_class_id[weekday_to_register] == "TBD":
-        raise NotImplementedError(
-            f"Unsupported weekday! (Noon class of weekday {weekday_to_register} without known ID!)"
-        )
-    if day_to_register_datetime < datetime.now():
+    if datetime_to_register < datetime.now():
         # Class in the past, return and skip
         return None
     if (
-        day_to_register_datetime - datetime.now()
+        datetime_to_register - datetime.now()
     ).total_seconds() >= max_hours_in_future_to_register * 3600:
         # Too far in future to register yet, return and skip
         return None
-    class_datetime_str = day_to_register_datetime.strftime(f"%Y-%m-%d")
+    class_day_datetime_str = datetime_to_register.strftime(f"%Y-%m-%d")
+    time_str =datetime_to_register.strftime(f"%H:%M") # Class time to register.
+    class_datetime_weekday_str = weekday_short_str(datetime_to_register)
     # Click on the "+"" button on the date to register
+    class_noon_xpath = (
+        f"//td[contains(@class, '{class_datetime_weekday_str}') and @data-classdate='{class_day_datetime_str}']"
+        f"//div[contains(@class, 'table-chk') and contains(@id, '{class_day_datetime_str}')]"
+        f"//span[contains(@class, 'class_time') and contains(text(), '{time_str}')]"
+        f"/ancestor::div[contains(@class, 'table-chk')]" # Go up to the parent div of the class time span
+    )
+
     try:
         register_box = web_handle.driver.find_element(
             By.XPATH,
-            f'//*[@id="{noon_class_id[weekday_to_register]},{class_datetime_str}"]/p',
+            class_noon_xpath,
         )
     except Exception as e:
-        # TODO: Handle the case if no class for that day (e.g. Christmas 2024 "//*[@id="764296,2024-12-24"]/p")
+        # TODO: Better handle the case if no class for that day (e.g. Christmas 2024 "//*[@id="764296,2024-12-24"]/p")
         raise Exception(
-            f"Can't find a noon class to register on {class_datetime_str}! Original Exception: {e}"
+            f"Can't find a noon class to register on {datetime_to_register}! Original Exception: {e}"
         )
 
-    # Expected text in register box is "{Status}\nCrossFit Régulier\n12:00 - 13:00" where {Status} is "FULL", "Confirmed" or "X/Y" person suscribed.
+    # Expected text in register box is "{Status}\nCrossFit Régulier\n{class start hour}:00 - {class end hour}:00" where {Status} is "FULL", "Confirmed", "Canceled", or "X/Y" person suscribed.
     if (
-        "confirmed" in register_box.text.lower()
-        or "waiting list" in register_box.text.lower()
+        "confirm" in register_box.text.lower()
+        or "waiting" in register_box.text.lower()
     ):  # Other beginning of text in button is "FULL" or X/Y
         # Already registered, returning
         return False
+    elif "cancel" in register_box.text.lower():
+        raise ClassCanceledError()
 
-    register_button = web_handle.driver.find_element(
+
+    register_button = register_box.find_element(
         By.XPATH,
-        f'//*[@id="{noon_class_id[weekday_to_register]},{class_datetime_str}"]/p/i',
+        ".//i[contains(@class, 'subscribe-class-icon') and contains(@onclick, 'register')]",
     )
     register_button.click()
 
@@ -299,7 +309,6 @@ def register_noon_weekday_class(
             By.ID, "book_confirm_error_modal"
         ).text.lower()
     ):
-        # TODO: Implement sendind mail or warning if inscription needs payment!
         cancel_subscribe_btn = web_handle.wait.until(
             EC.element_to_be_clickable(
                 (
@@ -386,13 +395,12 @@ def send_log_file_via_email(
             f"Failed to send log file via email from {sender_email} to {recipient_email}: {e}"
         )
 
-
 def main(
     fliip_gym_name: str,
     fliip_username: str,
     fliip_password: str,
     max_hours_in_future_to_register: int,
-    noon_classes_to_register: dict[str, bool],
+    weekday_classes_to_register: dict[str, list[int]],
     recipient_email: str | None = None,
     sender_email: str | None = None,
     sender_password: str | None = None,
@@ -446,36 +454,36 @@ def main(
         )
         current_calendar_page_date = parser.parse(current_calendar_page_date.text)
 
-        for weekday_str in noon_classes_to_register:
-            if noon_classes_to_register[weekday_str]:
-                logger.debug(f"Registering for {weekday_str}...")
-                day_to_register_datetime = get_datetime_from_weekday_str(
+        for weekday_str, classes_hour_list in weekday_classes_to_register.items():
+            for class_hour in classes_hour_list:
+                logger.debug(f"Registering for {weekday_str} {class_hour}:00 class...")
+                datetime_to_register = get_datetime_from_weekday_str(
                     weekday_to_register_str=weekday_str,
+                    hour_to_register=class_hour,
                     current_calendar_page_date=current_calendar_page_date,
-                )  # TODO: use day_to_register_datetime as argument to register_noon_weekday_class instead
+                )
                 try:
-                    registered_return = register_noon_weekday_class(
+                    registered_return = register_to_class(
                         web_handle=web_handle,
-                        day_to_register_datetime=day_to_register_datetime,
+                        datetime_to_register=datetime_to_register,
                         max_hours_in_future_to_register=max_hours_in_future_to_register,
                     )
                 except Exception as e:
-                    # TODO: Send notif about failed date?
                     error_date_list.append(
                         (
-                            day_to_register_datetime,
+                            datetime_to_register,
                             e,
                         )
                     )
                     logger.error(
-                        f"Registration failed for {day_to_register_datetime.strftime(f'%Y-%m-%d')} - Exception: {e}."
+                        f"Registration failed for {datetime_to_register.strftime(f'%Y-%m-%d %H:%M')} - Exception: {e}."
                     )
                     continue
                 if registered_return is not None:
                     logger.info(
-                        f"Registration done for {day_to_register_datetime.strftime(f'%Y-%m-%d')} noon class - {'New Registration' if registered_return else 'Already Registered'}."
+                        f"Registration done for {datetime_to_register.strftime(f'%Y-%m-%d %H:%M')} noon class - {'New Registration' if registered_return else 'Already Registered'}."
                     )
-                    registered_return_list.append(day_to_register_datetime)
+                    registered_return_list.append(datetime_to_register)
 
         # Change the calendar week page to next week
         # Find and click the next week button
@@ -515,17 +523,21 @@ if __name__ == "__main__":
     fliip_gym_name = "crossfitahuntsic"
     max_hours_in_future_to_register = 168
 
-    noon_classes_to_register = {
-        "Monday": False,
-        "Tuesday": True,
-        "Wednesday": False,
-        "Thursday": True,
-        "Friday": False,
-        "Saturday": False,
-        "Sunday": False,
+    # Weekday classes to register
+    # Key is the weekday name, value is the list of class hours to register (12 for noon class)
+    # Hour is in 24h format, e.g. 12 for noon class, 16 for 4pm class.
+    # TODO: Replace with a dataclass object?
+    weekday_classes_to_register = {
+        "Monday": [],
+        "Tuesday": [12],
+        "Wednesday": [],
+        "Thursday": [12,16],
+        "Friday": [],
+        "Saturday": [],
+        "Sunday": [],
     }
     headless = (
-        True  # Set to false if need to see the chrome driver window - for debugging
+        False  # Set to false if need to see the chrome driver window - for debugging
     )
 
     # Get Login Infos
@@ -550,7 +562,7 @@ if __name__ == "__main__":
             fliip_username=fliip_username,
             fliip_password=fliip_password,
             max_hours_in_future_to_register=max_hours_in_future_to_register,
-            noon_classes_to_register=noon_classes_to_register,
+            weekday_classes_to_register=weekday_classes_to_register,
             recipient_email=recipient_email,
             sender_email=sender_email,
             sender_password=sender_password,
