@@ -59,7 +59,7 @@ def weekday_short_str(dt: datetime) -> str:
 
 
 def clean_old_log_entries(
-    log_file_path: str,
+    log_file_path: Path,
     days_threshold: int = 31,
 ) -> None:
     """
@@ -346,7 +346,7 @@ def register_to_class(
 
 
 def send_log_file_via_email(
-    log_file_path: str,
+    log_file_path: Path,
     recipient_email: str,
     sender_email: str,
     sender_password: str,
