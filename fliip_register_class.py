@@ -509,15 +509,22 @@ def main(
         and sender_email is not None
         and sender_password is not None
     ):
-        logger.info(
-            f"At least one date failed to register, sending log to {recipient_email}..."
-        )
+        if len(error_date_list) > 0:
+            logger.info(
+                f"At least one date failed to register, sending log to {recipient_email} from {sender_email}..."
+            )
+        else:
+            logger.info(
+                f"Force sending log file to {recipient_email} from {sender_email}."
+            )
         send_log_file_via_email(
             log_file_path=logging_file_path,
             recipient_email=recipient_email,
             sender_email=sender_email,
             sender_password=sender_password,
         )
+
+    return
 
 
 if __name__ == "__main__":
@@ -542,6 +549,9 @@ if __name__ == "__main__":
     }
     headless = (
         True  # Set to false if need to see the chrome driver window - for debugging
+    )
+    force_send_log_email = (
+        False  # Force sending the log file via email even if no errors occurred
     )
 
     # Get Login Infos
@@ -571,6 +581,7 @@ if __name__ == "__main__":
             sender_email=sender_email,
             sender_password=sender_password,
             headless=headless,
+            force_send_log_email=force_send_log_email,
         )
     except Exception as e:
         logger.error(f"Failed to run Fliip registering main: {e}.")
