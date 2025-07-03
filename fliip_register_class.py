@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass
 import logging
 import calendar
+from pathlib import Path
 
 # Third Party Imports
 from selenium import webdriver
@@ -33,7 +34,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)  # Set the logger level to DEBUG
 
 # Logging file handler config (logs to a file)
-logging_file_path = "fliip_register.log"  # Default log file path
+logging_file_path = (
+    Path(__file__).parent.joinpath("fliip_register.log").resolve()
+)  # Default log file path
 logging_file_handler = logging.FileHandler(logging_file_path)
 logging_file_handler.setLevel(logging.INFO)  # Log only errors and above to the file
 logging_file_formatter = logging.Formatter(logging_common_formatting_string)
@@ -538,7 +541,7 @@ if __name__ == "__main__":
         "Sunday": [],
     }
     headless = (
-        False  # Set to false if need to see the chrome driver window - for debugging
+        True  # Set to false if need to see the chrome driver window - for debugging
     )
 
     # Get Login Infos
