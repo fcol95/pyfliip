@@ -284,9 +284,21 @@ def register_to_class(
             f"Can't find a noon class to register on {datetime_to_register}! Original Exception: {e}"
         )
 
+    # Early already subscribed check
+    try:
+        # If the unsubscribe icon is present, already subscribed
+        unsubscribe_icon = register_box.find_element(
+            By.XPATH, ".//i[contains(@class, 'unsubscribe-class-icon')]"
+        )
+    except:
+        unsubscribe_icon = None
+
     # Expected text in register box is "{Status}\nCrossFit Régulier\n{class start hour}:00 - {class end hour}:00" where {Status} is "FULL", "Confirmed", "Canceled", or "X/Y" person suscribed.
     if (
-        "confirm" in register_box.text.lower() or "waiting" in register_box.text.lower()
+        "confirm"
+        in register_box.text.lower()  # NOTE: This condition seems to not exist anymore, but keeping it for safety
+        or "waiting" in register_box.text.lower()
+        or unsubscribe_icon is not None
     ):  # Other beginning of text in button is "FULL" or X/Y
         # Already registered, returning
         return False
@@ -304,14 +316,10 @@ def register_to_class(
         EC.any_of(
             EC.visibility_of_element_located((By.ID, "book_confirm_modal")),
             EC.visibility_of_element_located((By.ID, "book_confirm_error_modal")),
+            EC.visibility_of_element_located((By.ID, "modal-unregister")),
         )
     )
-    if (
-        "new membership"
-        in web_handle.driver.find_element(
-            By.ID, "book_confirm_error_modal"
-        ).text.lower()
-    ):
+    if "new membership" in popup_window.text.lower():
         cancel_subscribe_btn = web_handle.wait.until(
             EC.element_to_be_clickable(
                 (
@@ -322,6 +330,16 @@ def register_to_class(
         )
         cancel_subscribe_btn.click()
         raise OutOfMembershipError()
+    elif "unregister" in popup_window.text.lower():
+        # In case early already registered check missed it
+        # Already registered, returning
+        cancel_unregister_btn = web_handle.wait.until(
+            EC.element_to_be_clickable(
+                popup_window.find_element(By.CLASS_NAME, "btn-cancel")
+            )
+        )
+        cancel_unregister_btn.click()
+        return False
 
     # Click on the class confirm button
     confirm_button = web_handle.wait.until(
@@ -479,8 +497,11 @@ def main(
                             e,
                         )
                     )
+                    exception_string = str(e)
+                    if exception_string == "Message: \n":
+                        exception_string = e.__class__.__name__
                     logger.error(
-                        f"Registration failed for {datetime_to_register.strftime(f'%Y-%m-%d %H:%M')} - Exception: {e}."
+                        f"Registration failed for {datetime_to_register.strftime(f'%Y-%m-%d %H:%M')} - Exception: {exception_string}."
                     )
                     continue
                 if registered_return is not None:
@@ -524,6 +545,8 @@ def main(
             sender_password=sender_password,
         )
 
+    logger.info("Registering loop done!")
+
     return
 
 
@@ -548,7 +571,7 @@ if __name__ == "__main__":
         "Sunday": [],
     }
     headless = (
-        True  # Set to false if need to see the chrome driver window - for debugging
+        False  # Set to false if need to see the chrome driver window - for debugging
     )
     force_send_log_email = (
         False  # Force sending the log file via email even if no errors occurred
